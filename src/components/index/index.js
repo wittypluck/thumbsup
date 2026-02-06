@@ -39,9 +39,9 @@ class Index {
     const selectMetadata = this.db.prepare('SELECT * FROM files')
 
     // create hashmap of all files in the database
-    const databaseMap = {}
+    const databaseMap = new Map()
     for (const row of selectStatement.iterate()) {
-      databaseMap[row.path] = row.timestamp
+      databaseMap.set(row.path, row.timestamp)
     }
 
     const self = this
@@ -67,7 +67,7 @@ class Index {
       // calculate the difference: which files have been added, modified, etc
       const deltaFiles = delta.calculate(databaseMap, diskMap, options)
       emitter.emit('stats', {
-        database: Object.keys(databaseMap).length,
+        database: databaseMap.size,
         disk: Object.keys(diskMap).length,
         unchanged: deltaFiles.unchanged.length,
         added: deltaFiles.added.length,

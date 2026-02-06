@@ -1,10 +1,9 @@
-/* eslint-disable no-prototype-builtins */
 const _ = require('lodash')
 const GlobPattern = require('./pattern')
 
 /*
   Calculate the difference between files on disk and already indexed
-  - databaseMap = hashmap of {path, timestamp}
+  - databaseMap = Map of {path, timestamp}
   - diskMap = hashmap of {path, timestamp}
 */
 exports.calculate = (databaseMap, diskMap, { scanMode = 'full', include, exclude }) => {
@@ -20,10 +19,10 @@ exports.calculate = (databaseMap, diskMap, { scanMode = 'full', include, exclude
   // For now, partial scans only uses the include/exclude filter
   // If we pass it it, other filters would apply as well (e.g. photo/video/raw...)
   const pattern = new GlobPattern({ include, exclude, extensions: [] })
-  _.each(databaseMap, (dbTime, dbPath) => {
+  databaseMap.forEach((dbTime, dbPath) => {
     const shouldProcessDBEntry = (scanMode === 'full') ? true : pattern.match(dbPath)
     if (shouldProcessDBEntry) {
-      if (diskMap.hasOwnProperty(dbPath)) {
+      if (Object.prototype.hasOwnProperty.call(diskMap, dbPath)) {
         const modified = Math.abs(dbTime - diskMap[dbPath]) > 1000
         if (modified) {
           delta.modified.push(dbPath)
@@ -42,10 +41,9 @@ exports.calculate = (databaseMap, diskMap, { scanMode = 'full', include, exclude
     }
   })
   _.each(diskMap, (diskTime, diskPath) => {
-    if (!databaseMap.hasOwnProperty(diskPath)) {
+    if (!databaseMap.has(diskPath)) {
       delta.added.push(diskPath)
     }
   })
   return delta
 }
-/* eslint-enable no-prototype-builtins */
