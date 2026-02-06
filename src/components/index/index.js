@@ -20,7 +20,7 @@ class Index {
     this.db = new Database(indexPath, {})
     this.db.pragma('journal_mode = WAL')
     this.db.pragma('synchronous = NORMAL')
-    this.db.pragma('cache_size = -64000')
+    this.db.pragma('cache_size = -64000') // 64MB cache
     this.db.exec('CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, timestamp INTEGER, metadata BLOB)')
   }
 
@@ -94,6 +94,14 @@ class Index {
       // call <exiftool> on added and modified files
       // and write each entry to the database in batched transactions
       const pendingInserts = []
+      function flushInserts () {
+        if (pendingInserts.length > 0) {
+          self.db.transaction(() => {
+            pendingInserts.forEach(item => insertStatement.run(item.path, item.timestamp, item.metadata))
+          })()
+          pendingInserts.length = 0
+        }
+      }
       const stream = exiftool.parse(mediaFolder, toProcess, options.concurrency)
       stream.on('data', entry => {
         const timestamp = moment(entry.File.FileModifyDate, EXIF_DATE_FORMAT).valueOf()
@@ -101,20 +109,11 @@ class Index {
         ++processed
         // flush batch when it reaches the threshold
         if (pendingInserts.length >= DB_BATCH_SIZE) {
-          self.db.transaction(() => {
-            pendingInserts.forEach(item => insertStatement.run(item.path, item.timestamp, item.metadata))
-          })()
-          pendingInserts.length = 0
+          flushInserts()
         }
         emitter.emit('progress', { path: entry.SourceFile, processed, total: toProcess.length })
       }).on('end', () => {
-        // flush any remaining inserts
-        if (pendingInserts.length > 0) {
-          self.db.transaction(() => {
-            pendingInserts.forEach(item => insertStatement.run(item.path, item.timestamp, item.metadata))
-          })()
-          pendingInserts.length = 0
-        }
+        flushInserts()
         finished()
       })
     })
