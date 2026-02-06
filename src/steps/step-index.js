@@ -41,7 +41,15 @@ exports.run = function (opts, callback) {
       const filePath = path.join(opts.input, file.metadata.SourceFile)
       const picasa = picasaReader.file(filePath)
       const meta = new Metadata(file.metadata, picasa || {}, opts)
-      const model = new File(file.metadata, meta, opts)
+      // pass only the minimal fields needed by File, allowing the full
+      // exiftool object to be garbage-collected immediately
+      const model = new File({
+        SourceFile: file.metadata.SourceFile,
+        File: {
+          FileModifyDate: file.metadata.File.FileModifyDate,
+          MIMEType: file.metadata.File.MIMEType
+        }
+      }, meta, opts)
       // only include valid photos and videos (i.e. exiftool recognised the format)
       if (model.type !== 'unknown') {
         files.push(model)

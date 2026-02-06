@@ -41,4 +41,8 @@ function mediaType (dbEntry) {
   return 'unknown'
 }
 
+// Export helpers so step-index can extract fields before discarding raw exiftool data
+File.fileDate = fileDate
+File.mediaType = mediaType
+
 module.exports = File
