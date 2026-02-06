@@ -31,10 +31,12 @@ exports.build = function (rootAlbum, opts, callback) {
   })
 
   // now build everything
+  // prepare themes in series, then render all pages in parallel
+  const renderConcurrency = opts.concurrency || 3
   async.series([
     next => base.prepare(next),
     next => theme.prepare(next),
-    next => async.series(tasks, next)
+    next => async.parallelLimit(tasks, renderConcurrency, next)
   ], callback)
 
   // add robots & sitemap if needed

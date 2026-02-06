@@ -1,4 +1,5 @@
 const path = require('node:path')
+const os = require('node:os')
 const childProcess = require('node:child_process')
 const async = require('async')
 const Observable = require('zen-observable')
@@ -17,7 +18,8 @@ exports.run = function (rootAlbum, outputFolder) {
         createZip(zipPath, outputFolder, filenames, done)
       }
     })
-    async.series(zippers, err => {
+    const concurrency = Math.max(1, os.cpus().length)
+    async.parallelLimit(zippers, concurrency, err => {
       if (err) {
         observer.error(err)
       } else {

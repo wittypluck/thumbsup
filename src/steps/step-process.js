@@ -27,38 +27,49 @@ exports.create = function (files, opts, problems) {
   const tasks = {}
   const sourceFiles = new Set()
   const actionMap = actions.createMap(opts)
-  // accumulate all tasks into an object
-  // to remove duplicate destinations
+
+  // pre-collect all destination paths to batch stat lookups
+  const destPaths = []
+  const destEntries = []
   files.forEach(f => {
     Object.keys(f.output).forEach(out => {
-      const src = path.join(opts.input, f.path)
       const dest = path.join(opts.output, f.output[out].path)
-      const destDate = modifiedDate(dest)
       const action = actionMap[f.output[out].rel]
-      // ignore output files that don't have an action (e.g. existing links)
       if (action) {
-        debug(`Comparing ${f.path} (${f.date}) and ${f.output[out].path} (${destDate})`)
-      }
-      if (action && f.date > destDate) {
-        sourceFiles.add(f.path)
-        tasks[dest] = {
-          file: f,
-          dest,
-          rel: f.output[out].rel,
-          action: (done) => {
-            fs.mkdirSync(path.dirname(dest), { recursive: true })
-            debug(`${f.output[out].rel} from ${src} to ${dest}`)
-            return action({ src, dest }, err => {
-              if (err) {
-                error(`Error processing ${f.path} -> ${f.output[out].path}\n${err}`)
-                problems.addFile(f.path)
-              }
-              done()
-            })
-          }
-        }
+        destPaths.push(dest)
+        destEntries.push({ file: f, out, dest, action })
       }
     })
+  })
+
+  // batch stat all destinations at once
+  const destDates = batchModifiedDates(destPaths)
+
+  // accumulate all tasks into an object
+  // to remove duplicate destinations
+  destEntries.forEach(({ file: f, out, dest, action }) => {
+    const destDate = destDates.get(dest)
+    const src = path.join(opts.input, f.path)
+    debug(`Comparing ${f.path} (${f.date}) and ${f.output[out].path} (${destDate})`)
+    if (f.date > destDate) {
+      sourceFiles.add(f.path)
+      tasks[dest] = {
+        file: f,
+        dest,
+        rel: f.output[out].rel,
+        action: (done) => {
+          fs.mkdirSync(path.dirname(dest), { recursive: true })
+          debug(`${f.output[out].rel} from ${src} to ${dest}`)
+          return action({ src, dest }, err => {
+            if (err) {
+              error(`Error processing ${f.path} -> ${f.output[out].path}\n${err}`)
+              problems.addFile(f.path)
+            }
+            done()
+          })
+        }
+      }
+    }
   })
   // back into an array
   const list = Object.keys(tasks).map(dest => tasks[dest])
@@ -89,10 +100,14 @@ function listrTaskFromJob (job, outputRoot) {
   }
 }
 
-function modifiedDate (filepath) {
-  try {
-    return fs.statSync(filepath).mtime.getTime()
-  } catch (ex) {
-    return 0
+function batchModifiedDates (filepaths) {
+  const results = new Map()
+  for (const filepath of filepaths) {
+    try {
+      results.set(filepath, fs.statSync(filepath).mtime.getTime())
+    } catch (ex) {
+      results.set(filepath, 0)
+    }
   }
+  return results
 }

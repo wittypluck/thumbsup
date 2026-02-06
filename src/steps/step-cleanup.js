@@ -1,6 +1,5 @@
 const fs = require('node:fs')
 const path = require('node:path')
-const _ = require('lodash')
 const debug = require('debug')('thumbsup:debug')
 const Observable = require('zen-observable')
 const readdir = require('fs-readdir-recursive')
@@ -24,12 +23,12 @@ exports.run = function (fileCollection, outputRoot, dryRun) {
 function findObsolete (fileCollection, outputRoot) {
   const mediaRoot = path.join(outputRoot, 'media')
   const diskFiles = readdir(mediaRoot).map(f => path.join(mediaRoot, f))
-  const requiredFiles = []
+  const requiredFiles = new Set()
   fileCollection.forEach(f => {
     Object.keys(f.output).forEach(out => {
       const dest = path.join(outputRoot, f.output[out].path)
-      requiredFiles.push(dest)
+      requiredFiles.add(dest)
     })
   })
-  return _.difference(diskFiles, requiredFiles)
+  return diskFiles.filter(f => !requiredFiles.has(f))
 }

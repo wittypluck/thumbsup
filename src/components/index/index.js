@@ -10,11 +10,17 @@ const globber = require('./glob')
 
 const EXIF_DATE_FORMAT = 'YYYY:MM:DD HH:mm:ssZ'
 
+// batch size for database transactions (inserts and deletes)
+const DB_BATCH_SIZE = 1000
+
 class Index {
   constructor (indexPath) {
     // create the database if it doesn't exist
     fs.mkdirSync(path.dirname(indexPath), { recursive: true })
     this.db = new Database(indexPath, {})
+    this.db.pragma('journal_mode = WAL')
+    this.db.pragma('synchronous = NORMAL')
+    this.db.pragma('cache_size = -64000')
     this.db.exec('CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, timestamp INTEGER, metadata BLOB)')
   }
 
@@ -37,6 +43,8 @@ class Index {
     for (const row of selectStatement.iterate()) {
       databaseMap[row.path] = row.timestamp
     }
+
+    const self = this
 
     function finished () {
       // emit every file in the index
@@ -68,9 +76,12 @@ class Index {
         skipped: deltaFiles.skipped.length
       })
 
-      // remove deleted files from the DB
-      _.each(deltaFiles.deleted, path => {
-        deleteStatement.run(path)
+      // remove deleted files from the DB in batched transactions
+      const deleteBatches = _.chunk(deltaFiles.deleted, DB_BATCH_SIZE)
+      deleteBatches.forEach(batch => {
+        self.db.transaction(() => {
+          batch.forEach(p => deleteStatement.run(p))
+        })()
       })
 
       // check if any files need parsing
@@ -81,14 +92,31 @@ class Index {
       }
 
       // call <exiftool> on added and modified files
-      // and write each entry to the database
+      // and write each entry to the database in batched transactions
+      const pendingInserts = []
       const stream = exiftool.parse(mediaFolder, toProcess, options.concurrency)
       stream.on('data', entry => {
         const timestamp = moment(entry.File.FileModifyDate, EXIF_DATE_FORMAT).valueOf()
-        insertStatement.run(entry.SourceFile, timestamp, JSON.stringify(entry))
+        pendingInserts.push({ path: entry.SourceFile, timestamp, metadata: JSON.stringify(entry) })
         ++processed
+        // flush batch when it reaches the threshold
+        if (pendingInserts.length >= DB_BATCH_SIZE) {
+          self.db.transaction(() => {
+            pendingInserts.forEach(item => insertStatement.run(item.path, item.timestamp, item.metadata))
+          })()
+          pendingInserts.length = 0
+        }
         emitter.emit('progress', { path: entry.SourceFile, processed, total: toProcess.length })
-      }).on('end', finished)
+      }).on('end', () => {
+        // flush any remaining inserts
+        if (pendingInserts.length > 0) {
+          self.db.transaction(() => {
+            pendingInserts.forEach(item => insertStatement.run(item.path, item.timestamp, item.metadata))
+          })()
+          pendingInserts.length = 0
+        }
+        finished()
+      })
     })
 
     return emitter
