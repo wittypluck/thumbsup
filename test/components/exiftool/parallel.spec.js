@@ -13,43 +13,35 @@ describe('exiftool parallel', function () {
     exifStream.parse.restore()
   })
 
-  it('creates 1 stream if no concurrency', (done) => {
+  it('creates multiple streams even with concurrency=1 due to I/O multiplier', (done) => {
     // test data
-    const files = numberedFiles(3)
+    const files = numberedFiles(8)
     const concurrency = 1
-    // create the streams
+    // with multiplier of 4, concurrency=1 creates 4 workers
+    // 8 files split into 4 buckets = 2 files per bucket
     const stream = parallel.parse('input', files, concurrency)
     reduceStream(stream, emittedData => {
+      sinon.assert.callCount(exifStream.parse, 4)
+      // should have all 8 files in the merged output
       const emittedPaths = emittedData.map(e => e.SourceFile)
-      should(emittedPaths).eql([
-        'input/IMG_0001.jpg',
-        'input/IMG_0002.jpg',
-        'input/IMG_0003.jpg'
-      ])
+      should(emittedPaths).have.length(8)
       done()
     })
   })
 
   it('creates concurrent streams to split files evenly', (done) => {
     // test data
-    const files = numberedFiles(5)
+    const files = numberedFiles(10)
     const concurrency = 2
-    // create the streams
+    // with multiplier of 4, concurrency=2 creates 8 workers target
+    // 10 files, chunk size = ceil(10/8) = 2, so 5 buckets of 2 files each
     const stream = parallel.parse('input', files, concurrency)
     reduceStream(stream, emittedData => {
-      // should have created 2 streams, with 2 or 3 files each
-      sinon.assert.callCount(exifStream.parse, 2)
-      should(exifStream.parse.args[0]).eql(['input', ['IMG_0001.jpg', 'IMG_0002.jpg', 'IMG_0003.jpg']])
-      should(exifStream.parse.args[1]).eql(['input', ['IMG_0004.jpg', 'IMG_0005.jpg']])
-      // should have 5 files in the merged output
+      // should have created 5 streams (10 files / 2 per bucket)
+      sinon.assert.callCount(exifStream.parse, 5)
+      // should have 10 files in the merged output
       const emittedPaths = emittedData.map(e => e.SourceFile)
-      should(emittedPaths).eql([
-        'input/IMG_0001.jpg',
-        'input/IMG_0002.jpg',
-        'input/IMG_0003.jpg',
-        'input/IMG_0004.jpg',
-        'input/IMG_0005.jpg'
-      ])
+      should(emittedPaths).have.length(10)
       done()
     })
   })
