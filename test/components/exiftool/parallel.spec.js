@@ -51,7 +51,7 @@ function numberedFiles (count) {
   return Array(count).join(' ').split(' ').map((a, i) => `IMG_000${i + 1}.jpg`)
 }
 
-function mockExifStream (root, filenames) {
+function mockExifStream (root, filenames, opts) {
   const input = filenames.map(name => {
     return { SourceFile: `${root}/${name}`, Directory: root }
   })

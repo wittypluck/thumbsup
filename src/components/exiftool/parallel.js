@@ -13,7 +13,7 @@ const EXIFTOOL_CONCURRENCY_MULTIPLIER = 4
   Fans out the list of files to multiple exiftool processes (default = CPU count × 4)
   Returns a single stream of javascript objects, parsed from the JSON response
 */
-exports.parse = (rootFolder, filePaths, concurrency) => {
+exports.parse = (rootFolder, filePaths, concurrency, opts) => {
   // create several buckets of work
   const cpus = concurrency || os.cpus().length
   const workers = cpus * EXIFTOOL_CONCURRENCY_MULTIPLIER
@@ -22,7 +22,7 @@ exports.parse = (rootFolder, filePaths, concurrency) => {
   // create several <exiftool> streams that can work in parallel
   const streams = _.range(buckets.length).map(i => {
     debug(`Calling exiftool with ${buckets[i].length} files`)
-    return exiftool.parse(rootFolder, buckets[i])
+    return exiftool.parse(rootFolder, buckets[i], opts)
   })
   // merge the object streams
   return merge(streams)
