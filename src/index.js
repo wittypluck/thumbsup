@@ -2,6 +2,10 @@ const Listr = require('listr')
 const steps = require('./steps/index')
 const website = require('./website/website')
 const Problems = require('./problems')
+const { EventEmitter } = require('events')
+
+// Increase default max listeners to accommodate parallel media processing
+EventEmitter.defaultMaxListeners = 50
 
 exports.build = function (opts, done) {
   // How to render tasks
