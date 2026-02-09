@@ -53,6 +53,12 @@ const OPTIONS = {
     type: 'boolean',
     'default': false
   },
+  'use-metadata': {
+    group: 'Input options:',
+    description: 'Use file metadata (caption, keywords, people, rating, favourite)',
+    type: 'boolean',
+    'default': true
+  },
   'include': {
     group: 'Input options:',
     description: 'Glob pattern of files to include',
