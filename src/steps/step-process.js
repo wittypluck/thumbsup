@@ -27,34 +27,33 @@ exports.create = function (files, opts, problems) {
   const tasks = {}
   const sourceFiles = new Set()
   const actionMap = actions.createMap(opts)
-  // accumulate all tasks into an object
-  // to remove duplicate destinations
+  // single-pass: iterate files, stat each destination inline, and build tasks
   files.forEach(f => {
     Object.keys(f.output).forEach(out => {
-      const src = path.join(opts.input, f.path)
       const dest = path.join(opts.output, f.output[out].path)
-      const destDate = modifiedDate(dest)
       const action = actionMap[f.output[out].rel]
       // ignore output files that don't have an action (e.g. existing links)
       if (action) {
+        const destDate = modifiedDate(dest)
         debug(`Comparing ${f.path} (${f.date}) and ${f.output[out].path} (${destDate})`)
-      }
-      if (action && f.date > destDate) {
-        sourceFiles.add(f.path)
-        tasks[dest] = {
-          file: f,
-          dest,
-          rel: f.output[out].rel,
-          action: (done) => {
-            fs.mkdirSync(path.dirname(dest), { recursive: true })
-            debug(`${f.output[out].rel} from ${src} to ${dest}`)
-            return action({ src, dest }, err => {
-              if (err) {
-                error(`Error processing ${f.path} -> ${f.output[out].path}\n${err}`)
-                problems.addFile(f.path)
-              }
-              done()
-            })
+        if (f.date > destDate) {
+          const src = path.join(opts.input, f.path)
+          sourceFiles.add(f.path)
+          tasks[dest] = {
+            file: f,
+            dest,
+            rel: f.output[out].rel,
+            action: (done) => {
+              fs.mkdirSync(path.dirname(dest), { recursive: true })
+              debug(`${f.output[out].rel} from ${src} to ${dest}`)
+              return action({ src, dest }, err => {
+                if (err) {
+                  error(`Error processing ${f.path} -> ${f.output[out].path}\n${err}`)
+                  problems.addFile(f.path)
+                }
+                done()
+              })
+            }
           }
         }
       }

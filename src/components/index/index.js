@@ -10,11 +10,17 @@ const globber = require('./glob')
 
 const EXIF_DATE_FORMAT = 'YYYY:MM:DD HH:mm:ssZ'
 
+// batch size for database transactions (inserts and deletes)
+const DB_BATCH_SIZE = 1000
+
 class Index {
   constructor (indexPath) {
     // create the database if it doesn't exist
     fs.mkdirSync(path.dirname(indexPath), { recursive: true })
     this.db = new Database(indexPath, {})
+    this.db.pragma('journal_mode = WAL')
+    this.db.pragma('synchronous = NORMAL')
+    this.db.pragma('cache_size = -64000') // 64MB cache
     this.db.exec('CREATE TABLE IF NOT EXISTS files (path TEXT PRIMARY KEY, timestamp INTEGER, metadata BLOB)')
   }
 
@@ -33,10 +39,12 @@ class Index {
     const selectMetadata = this.db.prepare('SELECT * FROM files')
 
     // create hashmap of all files in the database
-    const databaseMap = {}
+    const databaseMap = new Map()
     for (const row of selectStatement.iterate()) {
-      databaseMap[row.path] = row.timestamp
+      databaseMap.set(row.path, row.timestamp)
     }
+
+    const self = this
 
     function finished () {
       // emit every file in the index
@@ -59,7 +67,7 @@ class Index {
       // calculate the difference: which files have been added, modified, etc
       const deltaFiles = delta.calculate(databaseMap, diskMap, options)
       emitter.emit('stats', {
-        database: Object.keys(databaseMap).length,
+        database: databaseMap.size,
         disk: Object.keys(diskMap).length,
         unchanged: deltaFiles.unchanged.length,
         added: deltaFiles.added.length,
@@ -68,9 +76,12 @@ class Index {
         skipped: deltaFiles.skipped.length
       })
 
-      // remove deleted files from the DB
-      _.each(deltaFiles.deleted, path => {
-        deleteStatement.run(path)
+      // remove deleted files from the DB in batched transactions
+      const deleteBatches = _.chunk(deltaFiles.deleted, DB_BATCH_SIZE)
+      deleteBatches.forEach(batch => {
+        self.db.transaction(() => {
+          batch.forEach(p => deleteStatement.run(p))
+        })()
       })
 
       // check if any files need parsing
@@ -81,14 +92,30 @@ class Index {
       }
 
       // call <exiftool> on added and modified files
-      // and write each entry to the database
+      // and write each entry to the database in batched transactions
+      const pendingInserts = []
+      function flushInserts () {
+        if (pendingInserts.length > 0) {
+          self.db.transaction(() => {
+            pendingInserts.forEach(item => insertStatement.run(item.path, item.timestamp, item.metadata))
+          })()
+          pendingInserts.length = 0
+        }
+      }
       const stream = exiftool.parse(mediaFolder, toProcess, options.concurrency)
       stream.on('data', entry => {
         const timestamp = moment(entry.File.FileModifyDate, EXIF_DATE_FORMAT).valueOf()
-        insertStatement.run(entry.SourceFile, timestamp, JSON.stringify(entry))
+        pendingInserts.push({ path: entry.SourceFile, timestamp, metadata: JSON.stringify(entry) })
         ++processed
+        // flush batch when it reaches the threshold
+        if (pendingInserts.length >= DB_BATCH_SIZE) {
+          flushInserts()
+        }
         emitter.emit('progress', { path: entry.SourceFile, processed, total: toProcess.length })
-      }).on('end', finished)
+      }).on('end', () => {
+        flushInserts()
+        finished()
+      })
     })
 
     return emitter

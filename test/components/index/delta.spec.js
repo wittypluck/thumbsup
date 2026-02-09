@@ -1,13 +1,18 @@
 const delta = require('../../../src/components/index/delta')
 const should = require('should/as-function')
 
+// Helper to create a Map from a plain object (databaseMap is now a Map)
+function toMap (obj) {
+  return new Map(Object.entries(obj))
+}
+
 describe('Index: delta', () => {
   describe('Scan mode: full', () => {
     it('no changes', () => {
-      const database = {
+      const database = toMap({
         IMG_0001: 1410000000000,
         IMG_0002: 1420000000000
-      }
+      })
       const disk = {
         IMG_0001: 1410000000000,
         IMG_0002: 1420000000000
@@ -23,10 +28,10 @@ describe('Index: delta', () => {
     })
 
     it('no changes within a second', () => {
-      const database = {
+      const database = toMap({
         IMG_0001: 1410000001000,
         IMG_0002: 1420000001000
-      }
+      })
       const disk = {
         IMG_0001: 1410000001500, // 500ms later
         IMG_0002: 1420000000500 // 500ms earlier
@@ -42,10 +47,10 @@ describe('Index: delta', () => {
     })
 
     it('new files', () => {
-      const database = {
+      const database = toMap({
         IMG_0001: 1410000000000,
         IMG_0002: 1420000000000
-      }
+      })
       const disk = {
         IMG_0001: 1410000000000,
         IMG_0002: 1420000000000,
@@ -62,10 +67,10 @@ describe('Index: delta', () => {
     })
 
     it('deleted files', () => {
-      const database = {
+      const database = toMap({
         IMG_0001: 1410000000000,
         IMG_0002: 1420000000000
-      }
+      })
       const disk = {
         IMG_0001: 1410000000000
       }
@@ -80,10 +85,10 @@ describe('Index: delta', () => {
     })
 
     it('modified files', () => {
-      const database = {
+      const database = toMap({
         IMG_0001: 1410000000000,
         IMG_0002: 1420000000000
-      }
+      })
       const disk = {
         IMG_0001: 1410000000000,
         IMG_0002: 1420000002000
@@ -99,11 +104,11 @@ describe('Index: delta', () => {
     })
 
     it('all cases', () => {
-      const database = {
+      const database = toMap({
         IMG_0001: 1410000000000,
         IMG_0002: 1420000000000,
         IMG_0003: 1430000000000
-      }
+      })
       const disk = {
         IMG_0001: 1410000000000,
         IMG_0002: 1420000002000,
@@ -122,10 +127,10 @@ describe('Index: delta', () => {
 
   describe('Scan mode: partial', () => {
     it('considers deleted files outside the inclusion pattern as skipped', () => {
-      const database = {
+      const database = toMap({
         'London/IMG_0001': 1410000000000,
         'Tokyo/IMG_0002': 1420000000000
-      }
+      })
       const disk = {
         'London/IMG_0001': 1410000000000
       }
@@ -144,10 +149,10 @@ describe('Index: delta', () => {
     })
 
     it('considers deleted files matching an exclusion pattern as skipped', () => {
-      const database = {
+      const database = toMap({
         'London/IMG_0001': 1410000000000,
         'Tokyo/IMG_0002': 1420000000000
-      }
+      })
       const disk = {
         'London/IMG_0001': 1410000000000
       }
@@ -166,10 +171,10 @@ describe('Index: delta', () => {
     })
 
     it('considers files inside the inclusion pattern as deleted', () => {
-      const database = {
+      const database = toMap({
         'London/IMG_0001': 1410000000000,
         'Tokyo/IMG_0002': 1420000000000
-      }
+      })
       const disk = {
         'London/IMG_0001': 1410000000000
       }
@@ -190,10 +195,10 @@ describe('Index: delta', () => {
 
   describe('Scan mode: incremental', () => {
     it('considers files inside the inclusion pattern as skipped', () => {
-      const database = {
+      const database = toMap({
         'London/IMG_0001': 1410000000000,
         'Tokyo/IMG_0002': 1420000000000
-      }
+      })
       const disk = {
         'London/IMG_0001': 1410000000000
       }
