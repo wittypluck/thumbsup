@@ -5,8 +5,10 @@ const moment = require('moment')
 const dependencies = require('../src/cli/dependencies')
 const messages = require('../src/cli/messages')
 const options = require('../src/cli/options')
+const pkg = require('../package.json')
 
 console.log('')
+console.log(`Thumbsup v${pkg.version}`)
 
 // Read all options from the command-line / config file
 const args = process.argv.slice(2)
