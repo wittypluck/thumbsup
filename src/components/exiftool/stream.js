@@ -4,21 +4,69 @@ const debug = require('debug')('thumbsup:debug')
 const error = require('debug')('thumbsup:error')
 const JSONStream = require('JSONStream')
 
+// Tags always needed (date, type, dimensions)
+const CORE_TAGS = [
+  '-File:FileModifyDate',
+  '-File:MIMEType',
+  '-EXIF:DateTimeOriginal',
+  '-H264:DateTimeOriginal',
+  '-QuickTime:ContentCreateDate',
+  '-QuickTime:CreationDate',
+  '-QuickTime:CreateDate',
+  '-GIF:FrameCount',
+  '-Composite:ImageSize'
+]
+
+// Additional tags needed when --use-metadata is true
+const METADATA_TAGS = [
+  '-EXIF:ImageDescription',
+  '-IPTC:Caption-Abstract',
+  '-IPTC:Headline',
+  '-IPTC:Keywords',
+  '-XMP:Description',
+  '-XMP:Title',
+  '-XMP:Label',
+  '-XMP:Subject',
+  '-XMP:PersonInImage',
+  '-XMP:Rating',
+  '-QuickTime:Title'
+]
+
+/*
+  Build the list of exiftool tag arguments based on options.
+  When embedExif is true, we extract the full EXIF group.
+  When useMetadata is true (default), we also extract caption/keywords/people/rating tags.
+  Otherwise we only extract core tags for date, type and dimensions.
+*/
+exports.buildTagArgs = (opts = {}) => {
+  const useMetadata = opts.useMetadata !== false
+  const embedExif = opts.embedExif === true
+  const tags = [...CORE_TAGS]
+  if (useMetadata) {
+    tags.push(...METADATA_TAGS)
+  }
+  if (embedExif) {
+    // extract the full EXIF group for embedding in the gallery HTML
+    tags.push('-EXIF:all')
+  }
+  return tags
+}
+
 /*
   Spawn a single <exiftool> process and send all the files to be parsed
   Returns a stream which emits JS objects as they get returned
 */
-exports.parse = (rootFolder, filePaths) => {
+exports.parse = (rootFolder, filePaths, opts) => {
+  const tagArgs = exports.buildTagArgs(opts)
   const args = [
-    '-a', // include duplicate tags
     '-s', // use tag ID, not display name
     '-g', // include group names, as nested structures
     '-c', // specify format for GPS lat/long
     '%+.6f', // lat/long = float values
-    '-struct', // preserve XMP structure
     '-json', // JSON output
     '-charset', // allow UTF8 filenames
     'filename=utf8', // allow UTF8 filenames
+    ...tagArgs, // only extract needed tags
     '-@', // specify more arguments separately
     '-' // read arguments from standard in
   ]

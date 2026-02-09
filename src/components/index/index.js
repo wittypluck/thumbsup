@@ -13,6 +13,67 @@ const EXIF_DATE_FORMAT = 'YYYY:MM:DD HH:mm:ssZ'
 // batch size for database transactions (inserts and deletes)
 const DB_BATCH_SIZE = 1000
 
+// Tags to keep per group when stripping metadata before DB storage
+const CORE_FIELDS = {
+  File: ['FileModifyDate', 'MIMEType'],
+  EXIF: ['DateTimeOriginal', 'ImageDescription'],
+  IPTC: ['Caption-Abstract', 'Headline', 'Keywords'],
+  XMP: ['Description', 'Title', 'Label', 'Subject', 'PersonInImage', 'Rating'],
+  QuickTime: ['ContentCreateDate', 'CreationDate', 'CreateDate', 'Title'],
+  H264: ['DateTimeOriginal'],
+  GIF: ['FrameCount'],
+  Composite: ['ImageSize']
+}
+
+// EXIF fields to always strip (large binary blobs)
+const EXIF_STRIP = ['ThumbnailImage', 'ThumbnailOffset', 'ThumbnailLength']
+
+/*
+  Strip the raw exiftool entry down to only the fields the application needs.
+  - When embedExif is true, the full EXIF group is kept (minus thumbnail blobs)
+  - When useMetadata is false, caption/keywords/people/rating fields are dropped
+*/
+function stripMetadata (entry, options = {}) {
+  const useMetadata = options.useMetadata !== false
+  const embedExif = options.embedExif === true
+
+  const stripped = { SourceFile: entry.SourceFile }
+
+  for (const group of Object.keys(CORE_FIELDS)) {
+    if (!entry[group]) continue
+
+    if (group === 'EXIF' && embedExif) {
+      // keep the full EXIF group but remove binary thumbnail blobs
+      stripped.EXIF = Object.assign({}, entry.EXIF)
+      for (const key of EXIF_STRIP) {
+        delete stripped.EXIF[key]
+      }
+      continue
+    }
+
+    let fields = CORE_FIELDS[group]
+
+    // when useMetadata is false, only keep core fields (date, type, dimensions)
+    if (!useMetadata) {
+      if (group === 'EXIF') fields = ['DateTimeOriginal']
+      else if (group === 'IPTC' || group === 'XMP') continue
+      else if (group === 'QuickTime') fields = ['ContentCreateDate', 'CreationDate', 'CreateDate']
+    }
+
+    const obj = {}
+    let hasFields = false
+    for (const field of fields) {
+      if (entry[group][field] !== undefined) {
+        obj[field] = entry[group][field]
+        hasFields = true
+      }
+    }
+    if (hasFields) stripped[group] = obj
+  }
+
+  return stripped
+}
+
 class Index {
   constructor (indexPath) {
     // create the database if it doesn't exist
@@ -102,10 +163,11 @@ class Index {
           pendingInserts.length = 0
         }
       }
-      const stream = exiftool.parse(mediaFolder, toProcess, options.concurrency)
+      const stream = exiftool.parse(mediaFolder, toProcess, options.concurrency, options)
       stream.on('data', entry => {
         const timestamp = moment(entry.File.FileModifyDate, EXIF_DATE_FORMAT).valueOf()
-        pendingInserts.push({ path: entry.SourceFile, timestamp, metadata: JSON.stringify(entry) })
+        const stripped = stripMetadata(entry, options)
+        pendingInserts.push({ path: entry.SourceFile, timestamp, metadata: JSON.stringify(stripped) })
         ++processed
         // flush batch when it reaches the threshold
         if (pendingInserts.length >= DB_BATCH_SIZE) {
@@ -131,3 +193,4 @@ class Index {
 }
 
 module.exports = Index
+module.exports.stripMetadata = stripMetadata
