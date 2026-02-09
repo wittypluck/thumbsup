@@ -23,15 +23,16 @@ const FILENAME_DATE_FORMAT = 'YYYYMMDD HHmmss'
 
 class Metadata {
   constructor (exiftool, picasa, opts) {
+    const useMetadata = opts ? (opts.useMetadata !== false) : true
     // standardise metadata
     this.date = getDate(exiftool)
-    this.caption = caption(exiftool, picasa)
-    this.keywords = keywords(exiftool, picasa)
-    this.people = people(exiftool)
+    this.caption = useMetadata ? caption(exiftool, picasa) : null
+    this.keywords = useMetadata ? keywords(exiftool, picasa) : []
+    this.people = useMetadata ? people(exiftool) : []
     this.video = video(exiftool)
     this.animated = animated(exiftool)
-    this.rating = rating(exiftool)
-    this.favourite = favourite(picasa)
+    this.rating = useMetadata ? rating(exiftool) : 0
+    this.favourite = useMetadata ? favourite(picasa) : false
     const size = dimensions(exiftool)
     this.width = size.width
     this.height = size.height

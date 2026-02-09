@@ -267,4 +267,63 @@ describe('Metadata', function () {
       should(meta.width).eql(null)
     })
   })
+
+  describe('use-metadata option', function () {
+    it('includes all metadata by default', function () {
+      const exiftool = fixtures.exiftool()
+      exiftool.EXIF.ImageDescription = 'some caption'
+      exiftool.IPTC.Keywords = ['beach']
+      exiftool.XMP.PersonInImage = ['John']
+      exiftool.XMP.Rating = 4
+      const picasa = { star: 'yes' }
+      const meta = new Metadata(exiftool, picasa)
+      should(meta.caption).eql('some caption')
+      should(meta.keywords).eql(['beach'])
+      should(meta.people).eql(['John'])
+      should(meta.rating).eql(4)
+      should(meta.favourite).eql(true)
+    })
+
+    it('includes all metadata when useMetadata is true', function () {
+      const exiftool = fixtures.exiftool()
+      exiftool.EXIF.ImageDescription = 'some caption'
+      exiftool.IPTC.Keywords = ['beach']
+      exiftool.XMP.PersonInImage = ['John']
+      exiftool.XMP.Rating = 4
+      const picasa = { star: 'yes' }
+      const meta = new Metadata(exiftool, picasa, { useMetadata: true })
+      should(meta.caption).eql('some caption')
+      should(meta.keywords).eql(['beach'])
+      should(meta.people).eql(['John'])
+      should(meta.rating).eql(4)
+      should(meta.favourite).eql(true)
+    })
+
+    it('skips metadata when useMetadata is false', function () {
+      const exiftool = fixtures.exiftool()
+      exiftool.EXIF.ImageDescription = 'some caption'
+      exiftool.IPTC.Keywords = ['beach']
+      exiftool.XMP.PersonInImage = ['John']
+      exiftool.XMP.Rating = 4
+      const picasa = { star: 'yes' }
+      const meta = new Metadata(exiftool, picasa, { useMetadata: false })
+      should(meta.caption).eql(null)
+      should(meta.keywords).eql([])
+      should(meta.people).eql([])
+      should(meta.rating).eql(0)
+      should(meta.favourite).eql(false)
+    })
+
+    it('still reads date, video, animated and size when useMetadata is false', function () {
+      const exiftool = fixtures.exiftool()
+      exiftool.EXIF.DateTimeOriginal = '2016:10:28 17:34:58'
+      exiftool.File.MIMEType = 'video/mp4'
+      exiftool.Composite = { ImageSize: '800x600' }
+      const meta = new Metadata(exiftool, {}, { useMetadata: false })
+      should(meta.date).eql(fixtures.date('2016-10-28 17:34:58').getTime())
+      should(meta.video).eql(true)
+      should(meta.width).eql(800)
+      should(meta.height).eql(600)
+    })
+  })
 })
